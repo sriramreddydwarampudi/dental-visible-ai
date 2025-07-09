@@ -75,7 +75,7 @@ jobs:
           ./darknet detector train data/obj.data cfg/yolov4-tooth.cfg darknet53.conv.74 -dont_show
 
       - name: Upload model weights and config
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: yolov4-tooth-artifacts
           path: |
