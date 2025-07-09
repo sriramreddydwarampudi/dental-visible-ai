@@ -1,6 +1,13 @@
 name: Train YOLOv4
 
 on:
+  push:
+    paths:
+      - '**.py'
+      - '**.cfg'
+      - '**.yml'
+      - '**.sh'
+      - '**.zip'
   workflow_dispatch:
 
 jobs:
@@ -8,39 +15,77 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+    - name: Checkout repo
+      uses: actions/checkout@v3
 
-      - name: Install system dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y wget unzip build-essential libopencv-dev
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
 
-      - name: Install Python tools
-        run: pip install gdown
+    - name: Install system dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y unzip wget tree build-essential libopencv-dev
 
-      - name: Prepare dataset
-        run: bash scripts/prepare_data.sh
+    - name: Install Python dependencies
+      run: pip install gdown
 
-      - name: Build Darknet
-        run: |
-          git clone https://github.com/AlexeyAB/darknet.git
-          cd darknet
-          sed -i 's/GPU=0/GPU=1/' Makefile
-          sed -i 's/CUDNN=0/CUDNN=1/' Makefile
-          sed -i 's/CUDNN_HALF=0/CUDNN_HALF=1/' Makefile
-          sed -i 's/OPENCV=0/OPENCV=1/' Makefile
-          make -j$(nproc)
+    - name: Download dataset ZIP from Google Drive
+      run: |
+        gdown --id 1P75HtV56ZE95yHy8BNZ6oOoDMVBTQpl9 -O dental.zip
 
-      - name: Download pretrained weights
-        run: wget -P darknet/ https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v4_pre/yolov4.conv.137
+    - name: Unzip dataset
+      run: |
+        unzip -q dental.zip -d dental
+        echo "Folder structure:"
+        tree dental || true
 
-      - name: Train YOLOv4
-        run: |
-          cd darknet
-          ./darknet detector train ../data/obj.data ../cfg/yolov4-dental.cfg yolov4.conv.137 -dont_show -map
+    - name: Remove existing darknet if any
+      run: rm -rf darknet
 
-      - name: Upload trained weights
-        uses: actions/upload-artifact@v4
-        with:
-          name: yolov4-dental-weights
-          path: darknet/backup/*.weights
+    - name: Clone and build darknet
+      run: |
+        git clone https://github.com/AlexeyAB/darknet.git
+        cd darknet
+        sed -i 's/GPU=0/GPU=1/' Makefile
+        sed -i 's/CUDNN=0/CUDNN=1/' Makefile
+        sed -i 's/CUDNN_HALF=0/CUDNN_HALF=1/' Makefile
+        sed -i 's/OPENCV=0/OPENCV=1/' Makefile
+        make -j$(nproc)
+
+    - name: Prepare dataset for Darknet
+      run: |
+        mkdir -p darknet/data/obj
+        cp dental/train/images/*.jpg darknet/data/obj/ || true
+        cp dental/train/labels/*.txt darknet/data/obj/ || true
+        cp dental/valid/images/*.jpg darknet/data/obj/ || true
+        cp dental/valid/labels/*.txt darknet/data/obj/ || true
+
+        # Example labels - add more if needed
+        echo -e "tooth\ncaries\nattrition\nFDI_11\nFDI_21" > darknet/data/obj.names
+
+        cat <<EOF > darknet/data/obj.data
+classes = 5
+train = data/train.txt
+valid = data/valid.txt
+names = data/obj.names
+backup = backup
+EOF
+
+        find darknet/data/obj -name "*.jpg" > darknet/data/train.txt
+        cp darknet/data/train.txt darknet/data/valid.txt
+
+    - name: Download pretrained weights
+      run: wget -O darknet/yolov4.conv.137 https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v4_pre/yolov4.conv.137
+
+    - name: Train YOLOv4 model
+      run: |
+        cd darknet
+        ./darknet detector train data/obj.data ../cfg/yolov4-tooth.cfg yolov4.conv.137 -dont_show -map || true
+
+    - name: Upload trained weights
+      uses: actions/upload-artifact@v4
+      with:
+        name: yolov4-dental-weights
+        path: darknet/backup/*.weights
