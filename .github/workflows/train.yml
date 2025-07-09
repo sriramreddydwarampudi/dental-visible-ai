@@ -7,7 +7,7 @@ jobs:
   train:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Python & gdown
         uses: actions/setup-python@v4
@@ -39,7 +39,7 @@ jobs:
           ./darknet detector train ../data/obj.data ../cfg/yolov4-tooth.cfg yolov4.conv.137 -dont_show -map
 
       - name: Upload Trained Weights
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: yolov4-tooth-weights
           path: darknet/backup/*.weights
