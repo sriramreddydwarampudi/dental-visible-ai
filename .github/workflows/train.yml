@@ -1,0 +1,45 @@
+name: Train YOLOv4
+
+on:
+  workflow_dispatch:
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python & gdown
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - run: pip install gdown
+
+      - name: Prepare Dataset
+        run: bash scripts/prepare_data.sh
+
+      - name: Build Darknet
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential libopencv-dev wget unzip
+          git clone https://github.com/AlexeyAB/darknet.git darknet
+          cd darknet
+          sed -i 's/GPU=0/GPU=1/' Makefile
+          sed -i 's/CUDNN=0/CUDNN=1/' Makefile
+          sed -i 's/CUDNN_HALF=0/CUDNN_HALF=1/' Makefile
+          sed -i 's/OPENCV=0/OPENCV=1/' Makefile
+          make -j
+
+      - name: Download Pretrained Weights
+        run: wget -O darknet/yolov4.conv.137 https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v4_pre/yolov4.conv.137
+
+      - name: Train YOLOv4
+        run: |
+          cd darknet
+          ./darknet detector train ../data/obj.data ../cfg/yolov4-tooth.cfg yolov4.conv.137 -dont_show -map
+
+      - name: Upload Trained Weights
+        uses: actions/upload-artifact@v3
+        with:
+          name: yolov4-tooth-weights
+          path: darknet/backup/*.weights
